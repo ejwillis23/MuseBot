@@ -1,0 +1,12 @@
+MLTest.py
+Muse-bot.pdf
+temp.txt
+venv/
+
+musebot/.cache*
+musebot/cogs/__pycache__
+musebot/cogs/example.py
+musebot/tracks/tracks.csv
+
+MusebotSite/db.sqlite3
+MusebotSite/*/__pycache__
