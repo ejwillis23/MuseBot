@@ -4,9 +4,13 @@ temp.txt
 venv/
 
 musebot/.cache*
+musebot/bot.py
 musebot/cogs/__pycache__
 musebot/cogs/example.py
+musebot/tracks/archive.zip
 musebot/tracks/tracks.csv
+musebot/tracks/tracks.csv.zip
 
 MusebotSite/db.sqlite3
+MusebotSite/spotipyauth/views.py
 MusebotSite/*/__pycache__
