@@ -59,6 +59,7 @@ class MLCommands(commands.Cog):
         await message.edit(content=waiting)
     
         waiting = "Reccomendations for " + song[2] + " by " + song[1] + ":\n"
+        
         await message.edit(content= waiting + await makeRec(amount, song, rec))
     
     @commands.command()
@@ -85,12 +86,12 @@ class MLCommands(commands.Cog):
         await message.edit(content= waiting + await makeRec(amount, song, rec))
 
     @commands.command()
-    async def checking(self, ctx: commands.Context, *username: discord.Member):
+    async def RecWithFriends(self, ctx: commands.Context, amount: int, name, *username: discord.Member):
         msg = ""
         for user in username:
             # msg += user.mention + " "
             msg += "@" + user.display_name + " "
-        await ctx.send(f"{msg}: Input your song")
+        await ctx.send(f"{msg}: Input songs or your playlists! (e.g.: \"song: Disco Man by Remi Wolf, playlist: Fall Car\")")
 
         def check(m: discord.Message):
             return m.channel == ctx.channel and m.author in username # m.content == "hello"
@@ -98,7 +99,7 @@ class MLCommands(commands.Cog):
         songs = []
         for i in username:
             msg = await self.client.wait_for("message", check=check)
-            # sp = await sign_in(self.client.get_context)
+
             context = await self.client.get_context(msg)
             cache_handler = spotipy.cache_handler.CacheFileHandler(username=context.author)
             auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
@@ -110,18 +111,32 @@ class MLCommands(commands.Cog):
 
                 sign_in(context.author)
             sp = spotipy.Spotify(auth_manager=auth_manager)
-            
-            inpSong, inpArtist = msg.content.split(" by ") if " by " in msg.content else (msg.content, "")
-            song = await songSearch(sp, inpSong, inpArtist)
-            if len(song) == 0:
-                await ctx.send(f"Couldn't find {inpSong}")
-            else: 
-                songs.append(song)
-                await ctx.send(f"{msg.author} results: {song[2]} by {song[1]}")
+
+            # inpSong, inpArtist = msg.content.split(" by ") if " by " in msg.content else (msg.content, "")
+            division = msg.content.split(", ")
+            # print(division)
+            for inp in division:
+                # print(inp)
+                sopl, inputsopl = inp.split(": ") if ":" in inp else ("song", inp)
+                # print(sopl, inputsopl)
+                if sopl.lower() == "song":
+                    inpSong, inpArtist = inputsopl.split(" by ") if "by" in inputsopl else (inputsopl, "")
+                    song = await songSearch(sp, inpSong, inpArtist)
+                    # print("S")
+                else:
+                    inpSong = inputsopl
+                    song = await playlistSearch(sp, inputsopl)
+                    # print("P")
+
+                if len(song) == 0:
+                    await ctx.send(f"{msg.author}: Couldn't find {inputsopl}")
+                else: 
+                    songs.append(song)
+                    await ctx.send(f"{msg.author} results: {song[2]} by {song[1]}")
 
         meanslist = [songs[0][0], songs[0][1], songs[0][2], songs[0][3], 0,0,0,0,0,0,0,0,0,0,0,0,0,0]
         # print(meanslist)
-        for i, song in enumerate(songs):
+        for song in songs:
             # print(i, song)
             meanslist[4] += song[4]
             meanslist[5] += song[5]
@@ -141,14 +156,74 @@ class MLCommands(commands.Cog):
         means = ["", meanslist[1], meanslist[2], meanslist[3]]
         for item in meanslist[4:]:
             means.append(item / songslen)
-        print(means)
 
         rec = dataUse[dataUse.track_name.str.lower() != inpSong.lower()]
         waiting = "Waiting for results...\n"
         message = await ctx.send(waiting)
-    
-        waiting = "Reccomendations for input:\n"
-        await message.edit(content= waiting + await makeRec(10, means, rec))
+
+        playlists = sp.current_user_playlists(limit=50)
+        playlist = 0
+        for items in playlists['items']:
+            if name.lower() in items['name'].lower():
+                playlist = sp.playlist(items['id'], fields='external_urls,name,id,tracks.items(track(name,id,artists(name)))')
+                break
+        if playlist == 0:
+            playlist = sp.user_playlist_create(user=sp.me()['id'], name=name)
+        # print(playlist)
+
+        id_list = await makeRec(amount, means, rec)
+        songlist = []
+        playidlist = []
+        for song in playlist['tracks']['items']:
+            playidlist.append(song['track']['id'])
+        for songid in id_list:
+            if songid not in playidlist:
+                songlist.append(songid)
+
+        # print(songlist, songidlist, playidlist)
+        if len(songlist) > 0:
+            sp.playlist_add_items(playlist['id'], songlist)
+
+        waiting = "Resulting playlistt:\n"
+        await message.edit(content= waiting + playlist['external_urls']['spotify'])
+
+    @commands.command()
+    async def checking(self, ctx: commands.Context, name):
+        cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
+        auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
+        if not auth_manager.validate_token(cache_handler.get_cached_token()):
+            print("Not signed in")
+            role = discord.utils.find(lambda m: m.name == 'Users', ctx.guild.roles)
+            if role not in ctx.author.roles:
+                await ctx.author.add_roles(role)
+
+            sign_in(ctx.author)
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+
+        playlists = sp.current_user_playlists(limit=50)
+        playlist = 0
+        for items in playlists['items']:
+            if name.lower() in items['name'].lower():
+                playlist = sp.playlist(items['id'], fields='external_urls,name,id,tracks.items(track(name,id,artists(name)))')
+                break
+        if playlist == 0:
+            playlist = sp.user_playlist_create(user=sp.me()['id'], name=name)
+        # print(playlist)
+
+        songlist = []
+        songidlist = ['5njHdo6Ev5nVdssMYdcaZ5', '27sBcXtgTBSJRdUxei1a7J']
+        playidlist = []
+        for song in playlist['tracks']['items']:
+            playidlist.append(song['track']['id'])
+        for songid in songidlist:
+            if songid not in playidlist:
+                songlist.append(songid)
+
+        # print(songlist, songidlist, playidlist)
+        if len(songlist) > 0:
+            sp.playlist_add_items(playlist['id'], songlist)
+
+        await ctx.send(playlist['external_urls']['spotify'])
 
 async def songSearch(sp: spotipy.Spotify, track, artist=""):
     # print(track, artist)
@@ -191,15 +266,19 @@ async def songSearch(sp: spotipy.Spotify, track, artist=""):
 
 async def playlistSearch(sp: spotipy.Spotify, playlist):
     try:
-        playlists = sp.current_user_playlists(limit=26)
+        playlists = sp.current_user_playlists(limit=50)
+        songs = []
         for items in playlists['items']:
             if playlist.lower() in items['name'].lower():
                 songs = sp.playlist(items['id'], fields='name,id,tracks.items(track(name,id,popularity,artists(name)))')
-                print("Found")
+                # print("Found")
                 break
+        if len(songs) == 0:
+            print("Error")
+            return []
 
         # print(songs)
-        meanslist = ["", "", songs['name'], songs['id'], 0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+        meanslist = ["", sp.current_user()['display_name'], songs['name'], songs['id'], 0,0,0,0,0,0,0,0,0,0,0,0,0,0]
         # print(meanslist)
         for song in songs['tracks']['items']:
             # print(song)
@@ -264,12 +343,12 @@ async def makeRec(amount: int, song: list, rec):
     return make_pretty(result)
 
 def make_pretty(result):
-    res_str = ""
+    res_ids = []
     for idx in result.itertuples():
-        res_str += (idx.track_name + "    by    " + idx.artist_name + "\n")
+        res_ids.append(idx.track_id)
     # print(res_str)
 
-    return res_str
+    return res_ids
 
 async def setup(client):
     await client.add_cog(MLCommands(client))
