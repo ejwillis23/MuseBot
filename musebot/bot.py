@@ -47,7 +47,7 @@ async def on_member_update(before, after):
         newRole = next(role for role in after.roles if role not in before.roles)
         if newRole.name == "Users":
             cache_handler = spotipy.cache_handler.CacheFileHandler(username=after)
-            auth_manager = spotipy.oauth2.SpotifyOAuth(scope='playlist-read-collaborative user-follow-read user-read-recently-played user-library-read',
+            auth_manager = spotipy.oauth2.SpotifyOAuth(scope='playlist-read-collaborative playlist-modify-public playlist-modify-private user-follow-read user-read-recently-played user-library-read',
                                                cache_handler=cache_handler,
                                                show_dialog=True)
             
