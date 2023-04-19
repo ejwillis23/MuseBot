@@ -1,7 +1,7 @@
 import os
-os.environ['SPOTIPY_CLIENT_ID']='7172a2d687de49ada8dfe91eb3b29997'
-os.environ['SPOTIPY_CLIENT_SECRET']='64593e94fe1c4bc7998a0ee00e3ecba5'
-os.environ['SPOTIPY_REDIRECT_URI']='http://192.168.0.169:8000/sign-in'
+os.environ['SPOTIPY_CLIENT_ID']='hidden'
+os.environ['SPOTIPY_CLIENT_SECRET']='hidden'
+os.environ['SPOTIPY_REDIRECT_URI']='http://0.0.0.0:8000/sign-in'
 
 import discord
 import asyncio
@@ -119,6 +119,6 @@ async def load_extensions():
 async def main():
     async with client:
         await load_extensions()
-        await client.start('MTA3MDUwNzI0OTAzNTkxOTM4MA.Gt3qf8.Cuz9wifSTpfZXUoWK9SYCQ8NWgowXSFXkGsLCg')
+        await client.start('hidden')
 
 asyncio.run(main())
