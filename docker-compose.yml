@@ -1,0 +1,18 @@
+version: '3'
+
+services:
+   web:
+      build: .
+      volumes:
+         - .:/code
+      links:
+         - redis:redis
+      ports:
+         - 80:8000
+      user: 1002:1003
+      command: python3 /code/MusebotSite/manage.py runserver 0.0.0.0:8000
+
+   redis:
+      image: redis:latest
+      expose:
+         - 6379

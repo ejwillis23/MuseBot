@@ -14,3 +14,4 @@ musebot/tracks/tracks.csv.zip
 MusebotSite/db.sqlite3
 MusebotSite/*/__pycache__
 MusebotSite/spotipyauth/views.py
+MusebotSite/spotipyauth/migrations/__pycache__
