@@ -2,16 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Title</title>
+    <title>Name input</title>
 </head>
 <body>
 <form action="" method="post">
     {% csrf_token %}
     {{ form }}
-    <!--{{ form.your_name.label_tag }}
-    {{ form.your_name }}-->
     <input type="submit" value="OK">
 </form>
-<a class="btn btn-primary" href="/sign-in">Sign in</a>
 </body>
 </html>
