@@ -38,10 +38,67 @@ class MLCommands(commands.Cog):
     async def pingML(self, ctx):
         await ctx.send('pong ML')
 
+    @commands.command()
+    async def playlistSearch(self, ctx: commands.Context, playlist: str):
+        message = await ctx.reply("Searching for your playlist...")
+
+        cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
+        auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
+        if not auth_manager.validate_token(cache_handler.get_cached_token()):
+            print("Not signed in")
+            role = discord.utils.find(lambda m: m.name == 'Users', ctx.guild.roles)
+            if role not in ctx.author.roles:
+                await ctx.author.add_roles(role)
+
+            sign_in(ctx.author)
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+
+        playlists = sp.current_user_playlists(limit=50)
+        for items in playlists['items']:
+            if playlist.lower() in items['name'].lower():
+                songs = sp.playlist(items['id'], fields='name,id,external_urls')
+                # print("Found")
+                break
+    
+        # print(songs)
+        waiting = "Result of search: " + songs['name'] + "\n"
+        waiting += songs['external_urls']['spotify']
+        await message.edit(content=waiting)
+
+    @commands.command()
+    async def songSearch(self, ctx: commands.Context, song: str):
+        inpSong, inpArtist = song.split(" by ") if " by " in song else (song, "")
+        message = await ctx.reply("Searching for your song...")
+
+        cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
+        auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
+        if not auth_manager.validate_token(cache_handler.get_cached_token()):
+            print("Not signed in")
+            role = discord.utils.find(lambda m: m.name == 'Users', ctx.guild.roles)
+            if role not in ctx.author.roles:
+                await ctx.author.add_roles(role)
+
+            sign_in(ctx.author)
+        sp = spotipy.Spotify(auth_manager=auth_manager)
+
+        if inpArtist == "":
+            input = inpSong
+        else:
+            input = inpSong + " " + inpArtist
+        search = sp.search(q=input, type='track', limit=5)
+        if len(search['tracks']['items']) <= 0:
+            print("Error")
+            return []
+    
+        # print(search['tracks']['items'][0]['name'], search['tracks']['items'][0]['artists'][0]['name'], search['tracks']['items'][0]['external_urls']['spotify'])
+        waiting = "Result of search: " + search['tracks']['items'][0]['name'] + " by " + search['tracks']['items'][0]['artists'][0]['name'] + "\n"
+        waiting += search['tracks']['items'][0]['external_urls']['spotify']
+        await message.edit(content=waiting)
+
     @commands.command(help="Get some reccomendations based on an input song", brief="Recommendations for a song")
-    async def songRec(self, ctx, amount: int = commands.parameter(default=0, description="Amount of songs in resulting playlist"), songIn: str = commands.parameter(description="The name of the song (e.g. Hello hello hello by Remi Wolf)"),):
+    async def songRec(self, ctx: commands.Context, amount: int = commands.parameter(default=0, description="Amount of reccomended songs"), explicit: str = commands.parameter(default='y', description="Allow excplicit songs? 'y' or 'n'"), songIn: str = commands.parameter(description="The name of the song (e.g. Hello Hello Hello by Remi Wolf)"), playOut: str = commands.parameter(default="Musebot Playlist", description="The name for your new playlist, or a playlist you already own")):
         inpSong, inpArtist = songIn.split(" by ") if " by " in songIn else (songIn, "")
-        message = await ctx.send("Waiting for results...")
+        message = await ctx.reply("Searching for your song...")
 
         cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
         auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
@@ -56,16 +113,37 @@ class MLCommands(commands.Cog):
 
         song = await songSearch(sp, inpSong, inpArtist)
         rec = dataUse[dataUse.track_name.str.lower() != songIn.lower()]
-        waiting = "Waiting for results of " + song[2] + " by " + song[1] + "...\n"
+        waiting = "Waiting for reccomendations from " + song[2] + " by " + song[1] + "...\n"
         await message.edit(content=waiting)
+
+        playlists = sp.current_user_playlists(limit=50)
+        playlist = 0
+        for items in playlists['items']:
+            if playOut.lower() in items['name'].lower():
+                playlist = sp.playlist(items['id'], fields='external_urls,name,id,tracks.items(track(name,id,artists(name)))')
+                break
+        if playlist == 0:
+            playlist = sp.user_playlist_create(user=sp.me()['id'], name=playOut)
+
+        id_list = await makeRec(amount, song, rec, sp, explicit)
+        songlist = []
+        playidlist = []
+        for psong in playlist['tracks']['items']:
+            playidlist.append(psong['track']['id'])
+        for songid in id_list:
+            if songid not in playidlist:
+                songlist.append(songid)
+
+        if len(songlist) > 0:
+            sp.playlist_add_items(playlist['id'], songlist)
     
-        waiting = "Reccomendations for " + song[2] + " by " + song[1] + ":\n"
-        
-        await message.edit(content= waiting + await makeRec(amount, song, rec))
+        waiting = "Reccomendations based on song " + song[2] + " by " + song[1] + ":\n"
+        await message.edit(content= waiting + playlist['external_urls']['spotify'])
+        # await message.edit(content= waiting + await makeRec(amount, song, rec))
     
-    @commands.command(help="Get some reccomendations based on an input playlist from your library", brief="Recommendations for a playlist")
-    async def playlistRec(self, ctx, amount: int = commands.parameter(default=0, description="Amount of songs in resulting playlist"), playIn: str = commands.parameter(description="The name of a playlist in your library"),):
-        message = await ctx.send("Waiting for results...")
+    @commands.command(help="Make a playlist based on an input playlist that is in your Spotify library", brief="Create a playlist from a playlist")
+    async def playlistRec(self, ctx: commands.Context, amount: int = commands.parameter(default=0, description="Amount of reccomended songs"), explicit: str = commands.parameter(default='y', description="Allow excplicit songs? 'y' or 'n'"), playIn: str = commands.parameter(description="The name of a playlist in your library"), playOut: str = commands.parameter(default="Musebot Playlist", description="The name for your new playlist, or a playlist you already own")):
+        message = await ctx.reply("Searching for your playlist...")
 
         cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
         auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
@@ -80,15 +158,38 @@ class MLCommands(commands.Cog):
 
         song = await playlistSearch(sp, playIn)
         rec = dataUse[dataUse.track_name.str.lower() != playIn.lower()]
-        waiting = "Waiting for results of playlist input " + song[2] + "...\n"
+        waiting = "Waiting for reccomendations from playlist input " + song[2] + "...\n"
         await message.edit(content=waiting)
-    
-        waiting = "Reccomendations for " + song[2] + ":\n"
-        await message.edit(content= waiting + await makeRec(amount, song, rec))
+
+        playlists = sp.current_user_playlists(limit=50)
+        playlist = 0
+        for items in playlists['items']:
+            if playOut.lower() in items['name'].lower():
+                playlist = sp.playlist(items['id'], fields='external_urls,name,id,tracks.items(track(name,id,artists(name)))')
+                break
+        if playlist == 0:
+            playlist = sp.user_playlist_create(user=sp.me()['id'], name=playOut)
+        # print(playlist)
+
+        id_list = await makeRec(amount, song, rec, sp, explicit)
+        songlist = []
+        playidlist = []
+        for psong in playlist['tracks']['items']:
+            playidlist.append(psong['track']['id'])
+        for songid in id_list:
+            if songid not in playidlist:
+                songlist.append(songid)
+
+        if len(songlist) > 0:
+            sp.playlist_add_items(playlist['id'], songlist)
+
+        # print(song)
+        waiting = "Reccomendations based on playlist " + song[2] + ":\n"
+        await message.edit(content= waiting + playlist['external_urls']['spotify'])
 
     rechelp = "This command will automatically create a new and add a playlist to the Spotify of whoever initiates the command. The playlist made will be public, and all your friends will be able to see it on creation. The 'usernames' argument can take multiple names, just seperate them with a space, and only tag people in this channel."
     @commands.command(help=rechelp, brief="See '.help RecWithFriends' for usage.")
-    async def RecWithFriends(self, ctx: commands.Context, amount: int = commands.parameter(default=0, description="Amount of songs in resulting playlist"), name: str = commands.parameter(default="Musebot Playlist", description="The name for your new playlist, or a playlist you already own"), *usernames: discord.Member):
+    async def RecWithFriends(self, ctx: commands.Context, amount: int = commands.parameter(default=0, description="Amount of songs in resulting playlist"), explicit: str = commands.parameter(default='y', description="Allow excplicit songs? 'y' or 'n'"), name: str = commands.parameter(default="Musebot Playlist", description="The name for your new playlist, or a playlist you already own"), *usernames: discord.Member):
         cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
         auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
         if not auth_manager.validate_token(cache_handler.get_cached_token()):
@@ -155,7 +256,7 @@ class MLCommands(commands.Cog):
                     # await ctx.send(f"{msg.author}: Couldn't find {inputsopl}")
                 else: 
                     songs.append(song)
-                    resmsg += f"Search result {i}: {song[2]} by {song[1]}\n"
+                    resmsg += f"Search result {i+1}: {song[2]} by {song[1]}\n"
                     # await ctx.send(f"{msg.author} search result: {song[2]} by {song[1]}")
             await resend.edit(content=resmsg)
 
@@ -196,7 +297,7 @@ class MLCommands(commands.Cog):
             playlist = sp1.user_playlist_create(user=sp.me()['id'], name=name)
         # print(playlist)
 
-        id_list = await makeRec(amount, means, rec)
+        id_list = await makeRec(amount, means, rec, sp1, explicit)
         songlist = []
         playidlist = []
         for song in playlist['tracks']['items']:
@@ -343,7 +444,7 @@ async def sign_in(author):
     res = sp.current_user()
     print(res['display_name'])
 
-async def makeRec(amount: int, song: list, rec):
+async def makeRec(amount: int, song: list, rec, sp: spotipy.Spotify, exp):
     distance = []
     for songs in rec.values:
         d = 0
@@ -355,15 +456,19 @@ async def makeRec(amount: int, song: list, rec):
     rec = rec.sort_values('distance')
     columns = ['artist_name', 'track_name', 'track_id']
     
-    result = rec[columns][:amount]
-    result.drop_duplicates(subset="track_id", keep='first', inplace=True)
+    i = 0
+    result = pd.DataFrame()
     non_dupes = len(result.index)
-    i = non_dupes
     while non_dupes < amount:
-        result = rec[columns][:amount+i]
+        temp = rec[columns].iloc[i]
+        track = sp.track(temp['track_id'])
+        if exp == 'n' and track['explicit'] == True:
+            i += 1
+            continue
+        result = result.append(rec[columns][i:i+1])
         result.drop_duplicates(subset="track_id", keep='first', inplace=True)
-        i += 1
         non_dupes = len(result.index)
+        i += 1
 
     return make_pretty(result)
 
