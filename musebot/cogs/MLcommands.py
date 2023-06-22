@@ -38,8 +38,8 @@ class MLCommands(commands.Cog):
     async def pingML(self, ctx):
         await ctx.send('pong ML')
 
-    @commands.command()
-    async def playlistSearch(self, ctx: commands.Context, playlist: str):
+    @commands.command(help="Search for a playlist, can help to make sure you are grabbing the right one from your library. Use quotes around your input.", brief="Search for a playlist in your library")
+    async def playlistSearch(self, ctx: commands.Context, playlist: str = commands.parameter(description="The name of a playlist in your library")):
         message = await ctx.reply("Searching for your playlist...")
 
         cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
@@ -53,20 +53,35 @@ class MLCommands(commands.Cog):
             sign_in(ctx.author)
         sp = spotipy.Spotify(auth_manager=auth_manager)
 
+        def check(reaction, user):
+            return user == ctx.author and  (str(reaction.emoji) == '👍' or str(reaction.emoji) == '👎')
+
         playlists = sp.current_user_playlists(limit=50)
         for items in playlists['items']:
             if playlist.lower() in items['name'].lower():
                 songs = sp.playlist(items['id'], fields='name,id,external_urls')
-                # print("Found")
-                break
-    
-        # print(songs)
-        waiting = "Result of search: " + songs['name'] + "\n"
-        waiting += songs['external_urls']['spotify']
-        await message.edit(content=waiting)
+                waiting = "Is this the playlist you were searching for? React with 👍 or 👎\n" + songs['name'] + "\n"
+                # waiting += songs['external_urls']['spotify']
+                message = await ctx.send(content=waiting)
+                try:
+                    reaction, user = await self.client.wait_for('reaction_add', timeout=30.0, check=check)
+                except asyncio.TimeoutError:
+                    return
+                else:
+                    if str(reaction.emoji) == '👍':
+                        # print("Worked up")
+                        waiting = songs['name'] + "\n" + songs['external_urls']['spotify']
+                        await message.edit(content=waiting)
+                        return
+                    elif str(reaction.emoji) == '👎':
+                        # print("Worked down")
+                        waiting = songs['name'] + "\n" + "Trying again"
+                        await message.edit(content=waiting)
 
-    @commands.command()
-    async def songSearch(self, ctx: commands.Context, song: str):
+        await message.edit(content="Could not find your playlist, make sure you have the name correct and you are the owner of the playlist.")
+
+    @commands.command(help="Search for a song, can help to make sure you are grabbing the right one. Use quotes around your input.", brief="Search for a song")
+    async def songSearch(self, ctx: commands.Context, song: str = commands.parameter(description="The name of the song (e.g. \"Hello Hello Hello by Remi Wolf\")")):
         inpSong, inpArtist = song.split(" by ") if " by " in song else (song, "")
         message = await ctx.reply("Searching for your song...")
 
@@ -89,14 +104,33 @@ class MLCommands(commands.Cog):
         if len(search['tracks']['items']) <= 0:
             print("Error")
             return []
+        
+        def check(reaction, user):
+            return user == ctx.author and  (str(reaction.emoji) == '👍' or str(reaction.emoji) == '👎')
     
-        # print(search['tracks']['items'][0]['name'], search['tracks']['items'][0]['artists'][0]['name'], search['tracks']['items'][0]['external_urls']['spotify'])
-        waiting = "Result of search: " + search['tracks']['items'][0]['name'] + " by " + search['tracks']['items'][0]['artists'][0]['name'] + "\n"
-        waiting += search['tracks']['items'][0]['external_urls']['spotify']
-        await message.edit(content=waiting)
+        for items in search['tracks']['items']:
+            waiting = "Is this the song you were searching for? React with 👍 or 👎\n" + items['name'] + " by " + items['artists'][0]['name'] + "\n"
+            # waiting += songs['external_urls']['spotify']
+            message = await ctx.send(content=waiting)
+            try:
+                reaction, user = await self.client.wait_for('reaction_add', timeout=30.0, check=check)
+            except asyncio.TimeoutError:
+                return
+            else:
+                if str(reaction.emoji) == '👍':
+                    # print("Worked up")
+                    waiting = items['name'] + " by " + items['artists'][0]['name'] + "\n" + items['external_urls']['spotify']
+                    await message.edit(content=waiting)
+                    return
+                elif str(reaction.emoji) == '👎':
+                    # print("Worked down")
+                    waiting = items['name'] + " by " + items['artists'][0]['name'] + "\n" + "Trying again"
+                    await message.edit(content=waiting)
+                        
+        await message.edit(content="Could not find your song, make sure you have the name and/or artist correct.")
 
     @commands.command(help="Get some reccomendations based on an input song", brief="Recommendations for a song")
-    async def songRec(self, ctx: commands.Context, amount: int = commands.parameter(default=0, description="Amount of reccomended songs"), explicit: str = commands.parameter(default='y', description="Allow excplicit songs? 'y' or 'n'"), songIn: str = commands.parameter(description="The name of the song (e.g. Hello Hello Hello by Remi Wolf)"), playOut: str = commands.parameter(default="Musebot Playlist", description="The name for your new playlist, or a playlist you already own")):
+    async def songRec(self, ctx: commands.Context, amount: int = commands.parameter(default=0, description="Amount of reccomended songs"), explicit: str = commands.parameter(default='y', description="Allow excplicit songs? 'y' or 'n'"), songIn: str = commands.parameter(description="The name of the song (e.g. \"Hello Hello Hello by Remi Wolf\")"), playOut: str = commands.parameter(default="Musebot Playlist", description="The name for your new playlist, or a playlist you already own")):
         inpSong, inpArtist = songIn.split(" by ") if " by " in songIn else (songIn, "")
         message = await ctx.reply("Searching for your song...")
 
@@ -218,7 +252,7 @@ class MLCommands(commands.Cog):
                 msg = await self.client.wait_for("message", timeout=60.0, check=check)
             except asyncio.TimeoutError:
                 # print("timeout")
-                await ctx.send(f"{names}: You have ran out of time add input")
+                await ctx.send(f"{names}: You have ran out of time to add input")
                 break
 
             context = await self.client.get_context(msg)
@@ -287,6 +321,16 @@ class MLCommands(commands.Cog):
         waiting = "Waiting for results...\n"
         message = await ctx.send(waiting)
 
+        # cache_handler = spotipy.cache_handler.CacheFileHandler(username=ctx.author)
+        # auth_manager = spotipy.oauth2.SpotifyOAuth(cache_handler=cache_handler)
+        # if not auth_manager.validate_token(cache_handler.get_cached_token()):
+        #     print("Not signed in")
+        #     role = discord.utils.find(lambda m: m.name == 'Users', ctx.guild.roles)
+        #     if role not in ctx.author.roles:
+        #         await ctx.author.add_roles(role)
+
+        #     sign_in(ctx.author)
+        # sp1 = spotipy.Spotify(auth_manager=auth_manager)
         playlists = sp1.current_user_playlists(limit=50)
         playlist = 0
         for items in playlists['items']:
@@ -294,7 +338,7 @@ class MLCommands(commands.Cog):
                 playlist = sp1.playlist(items['id'], fields='external_urls,name,id,tracks.items(track(name,id,artists(name)))')
                 break
         if playlist == 0:
-            playlist = sp1.user_playlist_create(user=sp.me()['id'], name=name)
+            playlist = sp1.user_playlist_create(user=sp1.me()['id'], name=name)
         # print(playlist)
 
         id_list = await makeRec(amount, means, rec, sp1, explicit)
